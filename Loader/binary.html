@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+
+		<!-- Always force latest IE rendering engine (even in intranet) & Chrome Frame
+		Remove this if you use the .htaccess -->
+		<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+		<title>HTML</title>
+		<meta name="description" content="">
+		<meta name="author" content="Dlabz">
+
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		<!-- Replace favicon.ico & apple-touch-icon.png in the root of your domain and delete these references -->
+		<link rel="shortcut icon" href="/favicon.ico">
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+		<style>
+			.fit {position: absolute; top:0px; bottom:0px; left:0px; right:0px;}
+		</style>
+		<script src="./lib/jquery/jquery-1.8.2.min.js"></script>
+		<script src="./lib/jquery/jquery.cookie.js"></script>
+		<script src="./lib/three/three.js"></script>
+		<script src="./lib/three/controls/TrackballControls.js"></script>
+		<script src="./lib/three/Detector.js"></script>
+		<script src="./lib/three/stats.min.js"></script>
+		<script src="./lib/three/screenshot.js"></script>
+		<script src="./lib/stream/StringView.js"></script>
+		<script src="./lib/stream/AsyncStream.js"></script>
+		<script src="./lib/stream/DataInputStream.js"></script>
+		
+		<script src="./lib/stream/BinaryLoader.js"></script>
+		<script src="./lib/stream/BinView.js"></script>
+		<script src="./lib/stream/ThreeView.js"></script>
+		<script src="./api/bimserverapi.js"></script>
+		<script src="./api/EventDispatcher.js"></script>
+		<script src="./api/BIMport.js"></script>
+		<script src="./api/BIMscene.js"></script>
+		
+	</head>
+
+	<body class="fit">
+		<div class="fit" id="container-body">
+			<div class="fit" id="pi_viewport_main">
+				<canvas class="fit" id="pi_canvas_main">
+					
+				</canvas>
+			</div>
+		</div>
+		<script type="text/javascript">
+			var server, view;
+			
+			var gView;
+				
+			function loginCallback(e){
+				view = new BIMscene("main");
+				view.viewMode = 0;//inspection mode. defaults to 0
+				//view.events.register("progressEvent", function(e){console.log("ProgressEvent",e);});
+				
+				view.events.register(
+					"clickedOn", 
+					function(e){
+						console.log("clickedOn:", e);
+						view.events.trigger("setFailing", e.uuid);
+					}
+				);
+				//e.preventDefauilt();
+				console.log("login:", e);
+				
+				//LOADING BINARY GEOMETRY INSTANCES, NO DUPLICATES
+				//TODO: asyncronous download on progress
+				server.downloadBinary(
+					//393219,//ioh
+					131075,//ifcOpenHouse
+					//65539,//potkovica
+					function(url){
+						console.log('got binary url');
+						var request = new XMLHttpRequest();
+						request.responseType = 'arraybuffer';
+						request.addEventListener( 
+							'load', 
+							function ( event ) {
+								console.log("load" );
+								var geom = {};
+								var mesh = {};
+								tView = new ThreeView(new BinView(event.target.response));
+								
+								var next = true;
+								while(next){
+									var o = tView.read();
+									if(o == false)
+										next = false;
+									console.log(o);
+										
+									switch(o.type){
+											case "BufferGeometry":
+											geom[o.oid] = new THREE.BufferGeometry(o);
+											geom[o.oid].attributes = o.attributes;
+											break;
+											
+											case "Mesh":
+											var m = o.matrix;
+ 									   		console.log("--MATRIX--", o);
+ 									   		console.log(m[0],m[4],m[8],m[12]);
+ 									   		console.log(m[1],m[5],m[9],m[13]);
+    										console.log(m[2],m[6],m[10],m[14]);
+								    		console.log(m[3],m[7],m[11],m[15]);
+								    		var tm = new THREE.Matrix4().fromArray(m);//.set(m[0],m[4],m[8],m[12],m[1],m[5],m[9],m[13],m[2],m[6],m[10],m[14],m[3],m[7],m[11],m[15]);
+								    		console.log("--CONVERTED--");
+								    		console.log(tm);
+								    		var p = new THREE.Vector3();
+								    		var q = new THREE.Quaternion();
+								    		var s = new THREE.Vector3();
+								    		tm.decompose(p,q,s);
+								    		console.log("POSITION",p);
+								    		console.log("QUATERNION", q);
+								    		console.log("SCALE", s);
+											mesh[o.poid] = new THREE.Mesh(geom[o.geometry], new THREE.MeshBasicMaterial());
+											mesh[o.poid].userData.transform = tm;
+											break;
+									}
+								}
+								
+/*
+								for (var i = gView.remaining; i>0; i--){
+									var g = gView.readGeom();
+									if (g){
+										geom[g.oid] = new THREE.BufferGeometry(g);
+										geom[g.oid].attributes = g.attributes;
+									}
+								}
+								*/
+								console.log(geom);
+								view.load(geom, mesh);
+								
+								//view.load({});
+							}, 
+							false 
+						);
+						
+						request.addEventListener( 
+							'progress', 
+							function ( event ) {
+								console.log("progress:", event.target.response );
+							}, 
+							false 
+						);
+						
+						request.addEventListener( 
+							'error', 
+							function ( event ) {
+								console.log("error:", event );
+							}, 
+							false 
+						);
+						
+						request.open( 'GET', url, true );
+						request.send( null );
+						//view.loadURL(data);
+						//view.events.trigger("addAll");
+					}
+				);
+				
+
+			}
+			
+			
+			
+		
+			server = new BIMport("http://127.0.0.1:8080/"); //162.242.155.23
+			server.events.register(BIMport.LOGIN, loginCallback);
+			
+
+
+		</script>
+	</body>
+</html>
